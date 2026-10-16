@@ -55,7 +55,50 @@ const getCpuTimes = () => {
     return { idle: 0, total: 100 };
   }
 };
-prevCpuTimes = getCpuTimes();
+// Multi-Storage Scanner
+const getAllDisks = () => {
+  try {
+    const out = execSync('df -B1 -x tmpfs -x squashfs -x devtmpfs -x efivarfs 2>/dev/null', { encoding: 'utf8' });
+    const lines = out.trim().split('\n').slice(1);
+    return lines.map(line => {
+      const parts = line.trim().split(/\s+/);
+      const filesystem = parts[0];
+      const total = parseInt(parts[1], 10);
+      const used = parseInt(parts[2], 10);
+      const avail = parseInt(parts[3], 10);
+      const pct = parseInt(parts[4].replace('%', ''), 10);
+      const mount = parts[5];
+      
+      const diskBase = filesystem.replace('/dev/', '').replace(/[0-9]+$/, '');
+      let model = 'Storage Drive';
+      let isRotational = 1;
+      try {
+        model = fs.readFileSync('/sys/block/' + diskBase + '/device/model', 'utf8').trim();
+        isRotational = parseInt(fs.readFileSync('/sys/block/' + diskBase + '/queue/rotational', 'utf8').trim(), 10);
+      } catch(e) {}
+      
+      const isSSD = isRotational === 0 || model.toLowerCase().includes('ssd');
+      const label = mount === '/' ? 'Primary System SSD' : (total > 1e12 ? 'Mass Storage HDD' : 'Data Drive');
+
+      return {
+        filesystem,
+        mount,
+        model,
+        driveType: isSSD ? 'SSD' : 'HDD',
+        label,
+        total,
+        used,
+        avail,
+        percent: pct,
+        formattedTotal: formatBytes(total),
+        formattedUsed: formatBytes(used),
+        formattedAvail: formatBytes(avail)
+      };
+    }).filter(d => !d.mount.startsWith('/boot'));
+  } catch (e) {
+    return [];
+  }
+};
 
 app.get('/api/metrics', async (req, res) => {
   try {
@@ -93,20 +136,16 @@ app.get('/api/metrics', async (req, res) => {
     const usedSwap = swapTotal - swapFree;
     const swapPercent = swapTotal > 0 ? (usedSwap / swapTotal) * 100 : 0;
 
-    // DISK
-    let diskTotal = 0;
-    let diskUsed = 0;
-    let diskAvail = 0;
-    let diskPercent = 0;
+    // ALL CONNECTED STORAGES
+    const disks = getAllDisks();
+    const primaryDisk = disks.find(d => d.mount === '/') || disks[0] || {
+      total: 0, used: 0, avail: 0, percent: 0, formattedTotal: '0 B', formattedUsed: '0 B', formattedAvail: '0 B', label: 'Primary SSD'
+    };
 
-    try {
-      const dfOutput = execSync("df -B1 / | awk 'NR==2 {print $2, $3, $4}'", { encoding: 'utf8' });
-      const [t, u, a] = dfOutput.trim().split(/\s+/).map(Number);
-      diskTotal = t;
-      diskUsed = u;
-      diskAvail = a;
-      diskPercent = diskTotal > 0 ? (diskUsed / diskTotal) * 100 : 0;
-    } catch (e) {}
+    const totalStorageBytes = disks.reduce((sum, d) => sum + d.total, 0);
+    const totalUsedStorageBytes = disks.reduce((sum, d) => sum + d.used, 0);
+    const totalAvailStorageBytes = disks.reduce((sum, d) => sum + d.avail, 0);
+    const totalStoragePercent = totalStorageBytes > 0 ? (totalUsedStorageBytes / totalStorageBytes) * 100 : 0;
 
     // System Details
     let osName = 'Ubuntu Linux';
@@ -117,9 +156,9 @@ app.get('/api/metrics', async (req, res) => {
     } catch (e) {}
 
     // Health Score Algorithm
-    // Base 100, drops if disk > 80%, RAM > 85%, or CPU > 90%
+    // Base 100, drops if primary disk > 80%, RAM > 85%, or CPU > 90%
     let health = 100;
-    if (diskPercent > 80) health -= (diskPercent - 80) * 1.5;
+    if (primaryDisk.percent > 80) health -= (primaryDisk.percent - 80) * 1.5;
     if (ramPercent > 80) health -= (ramPercent - 80) * 1.2;
     if (cpuPercent > 85) health -= (cpuPercent - 85) * 1.0;
     health = Math.max(20, Math.min(100, Math.round(health)));
@@ -145,14 +184,18 @@ app.get('/api/metrics', async (req, res) => {
         formattedSwapUsed: formatBytes(usedSwap)
       },
       disk: {
-        total: diskTotal,
-        used: diskUsed,
-        available: diskAvail,
-        percent: parseFloat(diskPercent.toFixed(1)),
-        formattedTotal: formatBytes(diskTotal),
-        formattedUsed: formatBytes(diskUsed),
-        formattedAvail: formatBytes(diskAvail)
+        ...primaryDisk,
+        totalAggregate: {
+          total: totalStorageBytes,
+          used: totalUsedStorageBytes,
+          avail: totalAvailStorageBytes,
+          percent: parseFloat(totalStoragePercent.toFixed(1)),
+          formattedTotal: formatBytes(totalStorageBytes),
+          formattedUsed: formatBytes(totalUsedStorageBytes),
+          formattedAvail: formatBytes(totalAvailStorageBytes)
+        }
       },
+      disks,
       system: {
         osName,
         hostname: os.hostname(),

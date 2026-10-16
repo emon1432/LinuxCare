@@ -186,11 +186,12 @@ export default function App() {
                 </div>
               </div>
 
-              {/* BOTTOM ROW: Dual Neon Sliders & Segmented Storage Breakdown */}
+              {/* BOTTOM ROW: All Connected Drives & Storage Breakdown */}
               <StorageBar
                 diskMetrics={metrics?.disk}
                 ramMetrics={metrics?.ram}
                 storageBreakdown={storageBreakdown}
+                disks={metrics?.disks}
               />
             </>
           )}
