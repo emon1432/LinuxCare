@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-cyber-bg text-cyber-text antialiased selection:bg-cyber-cyan selection:text-black;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom Neon Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0c0f24;
+}
+::-webkit-scrollbar-thumb {
+  background: #232a5c;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #00f5d4;
+}
+
+/* Custom Glassmorphism */
+.cyber-card {
+  background: rgba(19, 23, 56, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(46, 55, 120, 0.4);
+}
+
+.cyber-card:hover {
+  border-color: rgba(0, 245, 212, 0.35);
+  box-shadow: 0 8px 24px -4px rgba(0, 245, 212, 0.12);
+}
+
+/* Glowing text */
+.text-glow-cyan {
+  text-shadow: 0 0 10px rgba(0, 245, 212, 0.6);
+}
+
+.text-glow-blue {
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+}
